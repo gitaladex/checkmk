@@ -37,12 +37,18 @@ class Severity(Enum):
         return Severity.NA
 
 
+class Alert(NamedTuple):
+    alert_name: str
+    message: Optional[str]
+
+
 class Rule(NamedTuple):
     rule_name: str
     group_name: str
     status: RuleState
     severity: Severity
     message: Optional[str]
+    alerts: Optional[List[Alert]]
 
 
 Group = Dict[str, Rule]
@@ -71,6 +77,7 @@ class AlertRemapping(TypedDict):
 
 class CheckParams(TypedDict, total=False):
     alert_remapping: List[AlertRemapping]
+    detailed_nested_alerts: bool
 
 
 default_discovery_parameters = DiscoveryParams(
@@ -145,6 +152,7 @@ def parse_alertmanager(string_table: type_defs.StringTable) -> Section:
                     RuleState(rule["state"]),
                     Severity(rule["severity"]),
                     rule["message"],
+                    rule["alerts"]
                 ),
             )
     return section
@@ -192,7 +200,15 @@ def check_alertmanager_rules(item: str, params: CheckParams, section: Section) -
                 yield Result(
                     state=status,
                     summary="Active alert",
-                    details=rule.message if rule.message else "No message",
+                    details="%s: %s"
+                    % (rule.rule_name, rule.message if rule.message else "No message")
+                    if params.get("detailed_nested_alerts")
+                    else
+                    "%s: %s" % (rule.rule_name, rule.message if rule.message else "No message")
+                    +
+                    "\nAlert messages:\n"
+                    +
+                    "\n".join([alert.get("message", "No message") for alert in rule.alerts]),
                 )
 
 
@@ -236,7 +252,14 @@ def check_alertmanager_groups(item: str, params: CheckParams, section: Section) 
                     state=status,
                     summary="Active alert: %s" % rule.rule_name,
                     details="%s: %s"
-                    % (rule.rule_name, rule.message if rule.message else "No message"),
+                    % (rule.rule_name, rule.message if rule.message else "No message")
+                    # if not params.get("detailed_nested_alerts")
+                    # else
+                    # "%s: %s\n"
+                    # % (rule.rule_name, rule.message if rule.message else "No message")
+                    # +
+                    # "\n".join(alert.get("message") for alert in rule.alerts)
+                    # ,
                 )
 
 
@@ -278,7 +301,14 @@ def check_alertmanager_summary(params: CheckParams, section: Section) -> CheckRe
                     state=status,
                     summary="Active alert: %s" % rule.rule_name,
                     details="%s: %s"
-                    % (rule.rule_name, rule.message if rule.message else "No message"),
+                    % (rule.rule_name, rule.message if rule.message else "No message")
+                    # if not params.get("detailed_nested_alerts")
+                    # else
+                    # "%s: %s\n"
+                    # % (rule.rule_name, rule.message if rule.message else "No message")
+                    # +
+                    # "\n".join(alert.get("message") for alert in rule.alerts)
+                    ,
                 )
 
 
